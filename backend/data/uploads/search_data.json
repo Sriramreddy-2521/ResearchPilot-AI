@@ -1,0 +1,25 @@
+{
+    "searches": [
+        {
+            "user_id": "default_user",
+            "query": "AI",
+            "timestamp": 1772253839.0048287
+        },
+        {
+            "user_id": "default_user",
+            "query": "AI",
+            "timestamp": 1772254184.094318
+        },
+        {
+            "user_id": "default_user",
+            "query": "ai",
+            "timestamp": 1772254644.8478992
+        },
+        {
+            "user_id": "default_user",
+            "query": "Cybersecurity",
+            "timestamp": 1772254845.238679
+        }
+    ],
+    "interactions": []
+}
