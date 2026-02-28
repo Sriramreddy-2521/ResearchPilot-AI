@@ -19,6 +19,12 @@ export const api = {
         return response.json();
     },
 
+    getDocument: async (documentId: string) => {
+        const response = await fetch(`${API_BASE_URL}/documents/${documentId}`);
+        if (!response.ok) throw new Error('Failed to fetch document');
+        return response.json();
+    },
+
     queryDocument: async (documentId: string, query: string) => {
         const response = await fetch(`${API_BASE_URL}/query`, {
             method: 'POST',
@@ -56,6 +62,16 @@ export const api = {
             body: JSON.stringify({ document_id: documentId }),
         });
         if (!response.ok) throw new Error('Mindmap generation failed');
+        return response.json();
+    },
+
+    translateText: async (text: string, targetLanguage: string) => {
+        const response = await fetch(`${API_BASE_URL}/translate`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text: text, target_language: targetLanguage }),
+        });
+        if (!response.ok) throw new Error('Translation failed');
         return response.json();
     }
 };

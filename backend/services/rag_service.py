@@ -130,6 +130,9 @@ class RAGService:
             return gen_response.text
             
         except Exception as e:
-            return f"Error during query generation: {str(e)}"
+            error_str = str(e)
+            if "RESOURCE_EXHAUSTED" in error_str or "429" in error_str:
+                return "⚠️ **Gemini API Rate Limit Exceeded:** You are using the Free Tier of Gemini, which allows around 15 requests per minute. Please wait 30 seconds and try again."
+            return f"Error during query generation: {error_str}"
 
 rag_service = RAGService()

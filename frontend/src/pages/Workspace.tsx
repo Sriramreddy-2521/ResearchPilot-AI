@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { FileText, Send, Sparkles, AlertCircle, ArrowLeft, Headphones, Network, X } from 'lucide-react';
+import { FileText, Send, Sparkles, AlertCircle, ArrowLeft, Headphones, Network, X, Globe } from 'lucide-react';
 import { api } from '../lib/api';
 import { MindMapViewer, type MindMapNodeData } from '../components/MindMap';
 
@@ -23,9 +23,39 @@ const Workspace = () => {
     const [mindMapData, setMindMapData] = useState<MindMapNodeData | null>(null);
     const [showMindMapModal, setShowMindMapModal] = useState(false);
 
+    // Translation Stats
+    const [selectedLanguage, setSelectedLanguage] = useState('English');
+    const [isTranslating, setIsTranslating] = useState(false);
+
     useEffect(() => {
         if (document && document.status === 'ready') {
-            handleSummarize();
+            const loadDocumentDetails = async () => {
+                try {
+                    const docDetails = await api.getDocument(document.id);
+                    // Pre-populate summary
+                    if (docDetails.summary) {
+                        setSummary(docDetails.summary);
+                    } else {
+                        handleSummarize();
+                    }
+
+                    // Pre-populate mindmap
+                    if (docDetails.has_mindmap) {
+                        setMindMapData(docDetails.mindmap_data);
+                    }
+
+                    // Pre-populate podcast
+                    if (docDetails.has_podcast) {
+                        setPodcastScript(docDetails.podcast_script);
+                        setPodcastAudio(`http://localhost:8000/api/audio/${document.id}`);
+                    }
+                } catch (e) {
+                    console.error("Failed to load document details", e);
+                    handleSummarize(); // fallback
+                }
+            };
+
+            loadDocumentDetails();
         }
     }, [document]);
 
@@ -101,6 +131,30 @@ const Workspace = () => {
         }
     };
 
+    const handleTranslate = async (e: React.ChangeEvent<HTMLSelectElement>) => {
+        const targetLang = e.target.value;
+        setSelectedLanguage(targetLang);
+
+        if (targetLang === 'English') return; // Assume English is default/original source for simplicity unless forced
+        if (!summary) return;
+
+        setIsTranslating(true);
+        try {
+            const transSummary = await api.translateText(summary, targetLang);
+            setSummary(transSummary.translated_text);
+
+            if (podcastScript) {
+                const transScript = await api.translateText(podcastScript, targetLang);
+                setPodcastScript(transScript.translated_text);
+            }
+        } catch (error) {
+            console.error(error);
+            alert("Failed to translate text.");
+        } finally {
+            setIsTranslating(false);
+        }
+    };
+
     return (
         <div className="flex-1 flex overflow-hidden">
             {/* Center Panel: Chat Interface */}
@@ -167,11 +221,31 @@ const Workspace = () => {
             </div>
 
             {/* Right Panel: Summary & Insights */}
-            <div className="w-96 bg-[#F7F7F5] flex flex-col overflow-y-auto">
+            <div className="w-[450px] bg-[#F7F7F5] flex flex-col overflow-y-auto">
                 <div className="p-6">
-                    <h3 className="text-sm font-semibold uppercase tracking-wider text-gray-500 mb-6 flex items-center">
-                        <Sparkles size={16} className="mr-2" /> Research Findings
-                    </h3>
+                    <div className="flex justify-between items-center mb-6">
+                        <h3 className="text-sm font-semibold uppercase tracking-wider text-gray-500 flex items-center">
+                            <Sparkles size={16} className="mr-2" /> Research Findings
+                        </h3>
+                        <div className="flex items-center text-sm text-gray-500 bg-white border border-gray-200 rounded-lg px-2 py-1 shadow-sm">
+                            <Globe size={14} className="mr-2" />
+                            <select
+                                value={selectedLanguage}
+                                onChange={handleTranslate}
+                                disabled={isTranslating || !summary}
+                                className="bg-transparent border-none outline-none cursor-pointer text-gray-700 font-medium"
+                            >
+                                <option value="English">English</option>
+                                <option value="Spanish">Spanish</option>
+                                <option value="French">French</option>
+                                <option value="German">German</option>
+                                <option value="Hindi">Hindi</option>
+                                <option value="Japanese">Japanese</option>
+                                <option value="Telugu">Telugu</option>
+                            </select>
+                            {isTranslating && <span className="ml-2 animate-spin w-3 h-3 border-2 border-gray-400 border-t-transparent rounded-full"></span>}
+                        </div>
+                    </div>
 
                     <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
                         <h4 className="font-semibold text-gray-900 border-b border-gray-100 pb-2 mb-4">AI Summary</h4>

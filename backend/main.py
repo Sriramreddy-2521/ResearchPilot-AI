@@ -36,6 +36,14 @@ class CompareRequest(BaseModel):
     document_id_1: str
     document_id_2: str
 
+class TranslateRequest(BaseModel):
+    text: str
+    target_language: str
+
+class TranslateRequest(BaseModel):
+    text: str
+    target_language: str
+
 # DB_DOCUMENTS has been replaced by db_service (MongoDB)
 
 def background_process_pdf(file_path: str, file_name: str, file_id: str):
@@ -85,6 +93,24 @@ async def upload_document(background_tasks: BackgroundTasks, file: UploadFile = 
 async def list_documents():
     return {"documents": db_service.get_all_documents()}
 
+@app.get("/api/documents/{document_id}")
+async def get_document(document_id: str):
+    doc = db_service.get_document(document_id)
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+        
+    # Return everything except the massive full_text block
+    return {
+        "id": doc.get("id"),
+        "filename": doc.get("filename"),
+        "status": doc.get("status"),
+        "summary": doc.get("summary"),
+        "has_podcast": "podcast_script" in doc,
+        "podcast_script": doc.get("podcast_script"),
+        "has_mindmap": "mindmap" in doc,
+        "mindmap_data": doc.get("mindmap")
+    }
+
 @app.post("/api/query")
 async def query_document(req: QueryRequest):
     if not req.query:
@@ -116,6 +142,10 @@ async def compare_documents(req: CompareRequest):
 
 @app.post("/api/podcast")
 async def generate_podcast(req: SummarizeRequest):
+    doc = db_service.get_document(req.document_id)
+    if doc and "podcast_script" in doc:
+        return {"script": doc["podcast_script"], "audio_url": f"/api/audio/{req.document_id}"}
+
     script_query = "Act as two hosts on a tech podcast. Write a short, engaging conversational script summarizing this research paper. CRITICAL: Output ONLY spoken dialogue in raw text format. Do NOT use markdown, do NOT use asterisks (*) for emphasis, and do NOT include sound effect directions (like *laughs* or *intro music*). Write it exactly as it should be read aloud."
     script = rag_service.query_document(script_query, document_id=req.document_id, top_k=5)
     
@@ -171,7 +201,11 @@ Paper Context:
         )
         mindmap_raw = response.text
     except Exception as e:
-        mindmap_raw = '{"name": "Error contacting Gemini", "children": []}'
+        error_str = str(e)
+        if "RESOURCE_EXHAUSTED" in error_str or "429" in error_str:
+            mindmap_raw = '{"name": "⚠️ Gemini API Rate Limit Exceeded", "children": [{"name": "You are using the Free Tier (approx 15 requests/min). Please wait 30 seconds and try again."}]}'
+        else:
+            mindmap_raw = '{"name": "Error contacting Gemini", "children": []}'
         
     # Strip markdown if Gemini accidentally included it
     if mindmap_raw.startswith("```json"):
@@ -195,3 +229,29 @@ async def generate_video_script(req: SummarizeRequest):
     script_query = "Create a 3-part storyboard for an explainer video of this paper. Include visual cues and voiceover text for each part."
     script = rag_service.query_document(script_query, document_id=req.document_id, top_k=5)
     return {"video_script": script, "status": "Video generation pipeline (rendering) is mocked for lightweight demo."}
+
+@app.post("/api/translate")
+async def translate_text(req: TranslateRequest):
+    if not req.text.strip():
+        raise HTTPException(status_code=400, detail="Text to translate cannot be empty.")
+        
+    prompt = f"""
+You are ResearchPilot AI, an expert, professional multi-lingual translator.
+Translate the following text into the requested target language ({req.target_language}). 
+Ensure the translation is natural, highly accurate, and retains the original formatting (e.g., Markdown, paragraphs). 
+Do NOT add extra conversational filler. Give only the translated text.
+
+Source Text:
+{req.text}
+"""
+    try:
+        response = rag_service.client.models.generate_content(
+            model='gemini-2.5-flash',
+            contents=prompt
+        )
+        return {"translated_text": response.text}
+    except Exception as e:
+        error_str = str(e)
+        if "RESOURCE_EXHAUSTED" in error_str or "429" in error_str:
+            return {"translated_text": f"⚠️ Gemini API Rate Limit Exceeded. Please wait 30 seconds and try again.\n\nOriginal text:\n{req.text}"}
+        raise HTTPException(status_code=500, detail=f"Translation failed: {str(e)}")
